@@ -1,6 +1,6 @@
 export default function Footer() {
   return (
-    <footer className="bg-gray-50 dark:bg-gray-950 text-sm text-gray-600 dark:text-gray-400 w-full py-12 border-t border-gray-200 dark:border-gray-800 z-10 relative">
+    <footer className="bg-gray-50 dark:bg-gray-950 text-sm text-gray-600 dark:text-gray-400 w-full py-12 border-t border-gray-200 dark:border-gray-800">
       <div className="max-w-[1280px] mx-auto px-6 md:px-12 flex flex-col md:flex-row justify-between items-center gap-4">
         <div className="flex flex-col md:flex-row items-center gap-4">
           <span>© 2026 SkyGlide Inc. All rights reserved.</span>

@@ -101,7 +101,8 @@ export function AirportInput({
       </div>
 
       {showDropdown && (
-        <div className="absolute top-[calc(100%+8px)] left-0 w-72 bg-canvas rounded-2xl shadow-[0_4px_24px_rgba(0,0,0,0.12)] overflow-hidden z-50 border border-hairline-soft">
+        <div className="absolute top-[calc(100%+8px)] left-0 w-72 z-50 bg-canvas rounded-2xl shadow-[0_4px_24px_rgba(0,0,0,0.12)] border border-hairline-soft overflow-hidden">
+          <div className="max-h-[280px] overflow-y-auto overscroll-contain">
           {loading ? (
             Array.from({ length: 3 }).map((_, i) => (
               <div key={i} className="w-full flex items-center gap-3 px-4 py-3">
@@ -140,6 +141,7 @@ export function AirportInput({
               No airports found
             </div>
           )}
+          </div>
         </div>
       )}
     </div>

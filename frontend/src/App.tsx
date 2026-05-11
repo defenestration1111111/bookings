@@ -5,7 +5,7 @@ import { BookingPage, ConfirmationPage, ResultsPage, SearchPage } from "./pages"
 
 export default function App() {
   return (
-    <div>
+    <div className="min-h-screen flex flex-col">
       <Header />
       <Routes>
         <Route path="/" element={<SearchPage />} />
