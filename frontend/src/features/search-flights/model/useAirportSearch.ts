@@ -12,11 +12,12 @@ const search = useCallback(
   (query: string) => {
     if (debounceTimer.current) clearTimeout(debounceTimer.current);
 
+    setLoading(true);
+
     debounceTimer.current = setTimeout(async () => {
       abortRef.current?.abort();
       abortRef.current = new AbortController();
 
-      setLoading(true);
       try {
         const airports = await searchAirports(query, 10, abortRef.current.signal);
         setResults(airports);
