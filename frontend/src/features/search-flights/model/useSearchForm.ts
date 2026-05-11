@@ -1,16 +1,8 @@
-import { useEffect, useState } from "react";
-import { useAirports } from "./useAirports";
-import { Airport } from "../../../entities/airport/model/airport";
+import { useState } from "react";
 
 type TripType = "roundTrip" | "oneWay";
 
-function airportLabel(airport: Airport) {
-  return `${airport.city}, ${airport.airport_code}`;
-}
-
 export function useSearchForm() {
-  const { airports } = useAirports();
-
   const [tripType, setTripType] = useState<TripType>("roundTrip");
   const [from, setFrom] = useState("");
   const [to, setTo] = useState("");
@@ -20,14 +12,7 @@ export function useSearchForm() {
 
   const isRoundTrip = tripType === "roundTrip";
 
-  useEffect(() => {
-    if (!from && airports[0]) {
-      setFrom(airportLabel(airports[0]));
-    }
-  }, [airports, from]);
-
   return {
-    airports,
     tripType,
     isRoundTrip,
     from,

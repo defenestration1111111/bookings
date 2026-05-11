@@ -1,5 +1,4 @@
-import { FormEvent, useMemo } from "react";
-import { Airport } from "../../../entities/airport/model/airport";
+import { FormEvent } from "react";
 import { AirportInput } from "./AirportInput";
 import { DateSegment } from "./DateSegment";
 import { Divider } from "../../../shared/ui/Divider";
@@ -7,7 +6,6 @@ import { TravellerSelect } from "../../../shared/ui/TravellerSelect";
 import { useTranslation } from "react-i18next";
 
 type SearchFormProps = {
-  airports: Airport[];
   isRoundTrip: boolean;
   from: string;
   setFrom: (v: string) => void;
@@ -24,7 +22,6 @@ type SearchFormProps = {
 };
 
 export function SearchForm({
-  airports,
   isRoundTrip,
   from,
   setFrom,
@@ -40,24 +37,13 @@ export function SearchForm({
   onSubmit,
 }: SearchFormProps) {
   const { t } = useTranslation();
-  const matchingAirports = useMemo(
-    () => airports.map((airport) => `${airport.city}, ${airport.airport_code}`),
-    [airports]
-  );
 
   return (
     <form
       className="bg-canvas rounded-[28px] md:rounded-full shadow-[0_1px_2px_rgba(0,0,0,0.08),0_4px_12px_rgba(0,0,0,0.05)] flex flex-col md:flex-row md:items-center w-full md:h-[66px] relative group hover:shadow-[0_2px_4px_rgba(0,0,0,0.1),0_8px_24px_rgba(0,0,0,0.1)] transition-shadow duration-300"
       onSubmit={onSubmit}
     >
-      <datalist id="airport-options">
-        {matchingAirports.map((airport) => (
-          <option key={airport} value={airport} />
-        ))}
-      </datalist>
-
       <AirportInput
-        airports={airports}
         flexClass="flex-[1.5]"
         id="from"
         label={t("search.whereFrom")}
@@ -69,7 +55,6 @@ export function SearchForm({
       <Divider />
 
       <AirportInput
-        airports={airports}
         flexClass={isRoundTrip ? "flex-[1.3]" : "flex-[1.5]"}
         id="to"
         label={t("search.whereTo")}

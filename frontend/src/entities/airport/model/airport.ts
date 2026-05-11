@@ -1,4 +1,3 @@
-export type Airport = {
-  city: string;
-  airport_code: string;
-};
+import type { components } from "../../../shared/api/schema";
+
+export type Airport = components["schemas"]["AirportSummary"];
