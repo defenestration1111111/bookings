@@ -336,3 +336,26 @@ $RECYCLE.BIN/
 *.lnk
 
 # End of https://www.toptal.com/developers/gitignore/api/react,intellij+all,visualstudiocode,macos,windows,linux,node
+
+### Java / Maven ###
+target/
+*.class
+*.jar
+*.war
+*.nar
+*.ear
+hs_err_pid*
+replay_pid*
+
+### IDE ###
+# IntelliJ at any depth (root `.idea/*` rule above is path-anchored and misses nested modules).
+**/.idea/
+
+### Project-specific ###
+
+# Postgres Pro demo-big dump (~4 GB) — fetched manually per backend/README.md.
+backend/data/
+
+# Spring Initializr boilerplate — generic docs links, no project content. Keep on disk
+# for offline reference if useful, but don't track it.
+backend/HELP.md
