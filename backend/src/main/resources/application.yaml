@@ -1,0 +1,31 @@
+spring:
+  application:
+    name: bookings
+
+  datasource:
+    url: jdbc:postgresql://localhost:5432/airlines
+    username: airlines
+    password: secret
+    driver-class-name: org.postgresql.Driver
+
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+    baseline-on-migrate: false
+    default-schema: public
+
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    open-in-view: false
+    properties:
+      hibernate:
+        format_sql: true
+        highlight_sql: true
+        generate_statistics: true
+
+logging:
+  level:
+    org.hibernate.SQL: DEBUG
+    org.hibernate.orm.jdbc.bind: TRACE
+    org.flywaydb: INFO
