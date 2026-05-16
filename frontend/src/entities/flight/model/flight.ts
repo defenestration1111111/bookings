@@ -1,44 +1,23 @@
-// Перечисления — фиксированные наборы значений
+import type { components } from "../../../shared/api/schema";
+
+export type Itinerary = components["schemas"]["Itinerary"];
+export type Leg = components["schemas"]["Leg"];
+export type AirportSummary = components["schemas"]["AirportSummary"];
+export type FareClass = components["schemas"]["FareClass"];
+export type SortBy = components["schemas"]["SortBy"];
+export type PriceRange = components["schemas"]["PriceRange"];
+export type MinuteRange = components["schemas"]["MinuteRange"];
+export type FlightSearchRequest = components["schemas"]["FlightSearchRequest"];
+export type FlightSearchFilters = components["schemas"]["FlightSearchFilters"];
+export type FlightSearchResponse = components["schemas"]["FlightSearchResponse"];
+
 export type TripType = "roundTrip" | "oneWay";
-export type FareClass = "Economy" | "Comfort" | "Business";
 
-export type FlightLeg = {
-  from: string;
-  to: string;
-  departTime: string;
-  arriveTime: string;
-  duration: string;
-  stops: number;
-  departMinutes: number;
-  arriveMinutes: number;
-  departDate: string;        // ← добавить
-  direction: "outbound" | "inbound"; // ← добавить
-  nextDay?: string;
-};
-
-export type FlightOption = {
-  id: number;
-  tripType: TripType;
-  fareClass: FareClass;
-  offers: number;
-  price: number;
-  // outboundStops: number;        // 👈
-  // inboundStops: number | null;  // 👈 null для oneWay
-  legs: FlightLeg[];
-};
-
-// Новый тип — параметры поиска для API
 export type SearchParams = {
   from: string;
   to: string;
   departDate: string;
   tripType?: TripType;
-  returnDate?: string;      // только для roundTrip
+  returnDate?: string;
   passengerCount: number;
-  fareClass?: FareClass;    // необязательный фильтр
-};
-
-export type FlightResult = FlightOption & {
-  outboundStops: number;
-  inboundStops: number | null;
 };

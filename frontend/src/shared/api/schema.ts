@@ -30,6 +30,43 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/flights/search": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Search for flight itineraries (one-way).
+         * @description Returns a paginated, sorted list of itineraries from `origin` to
+         *     `destination` on `departureDate`. An itinerary may be direct or
+         *     include up to `filters.maxStopovers` connections (system hard cap: 2).
+         *
+         *     The server computes the top-200 matches for the
+         *     `(route, date, filters, sortBy)` tuple, caches them, and slices
+         *     `page`/`pageSize` from that cache. `totalResults` reflects the size
+         *     of the cached top-K, not the total count of all possible matches in
+         *     the database.
+         *
+         *     When `filters.fareClasses` is empty or omitted, each itinerary is
+         *     priced at its cheapest available class; the row's `fareClass` field
+         *     identifies which class produced that price. When `fareClasses` is
+         *     set, itineraries are filtered to those offering at least one of the
+         *     requested classes and priced at the cheapest of those.
+         *
+         *     Sort mode `durationAsc` orders by **total trip time** (first leg
+         *     depart → last leg arrive), not by sum of flight times.
+         */
+        post: operations["searchFlights"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -46,6 +83,141 @@ export interface components {
              * @example London
              */
             city: string;
+        };
+        /** @description Search parameters and filters for flight itinerary lookup. */
+        FlightSearchRequest: {
+            /**
+             * @description IATA code of the origin airport.
+             * @example LHR
+             */
+            origin: string;
+            /**
+             * @description IATA code of the destination airport.
+             * @example JFK
+             */
+            destination: string;
+            /**
+             * Format: date
+             * @description Calendar date of departure at the origin airport (local).
+             * @example 2026-06-15
+             */
+            departureDate: string;
+            /** @default 1 */
+            passengerCount: number;
+            sortBy?: components["schemas"]["SortBy"];
+            /**
+             * @description Zero-based page index.
+             * @default 0
+             */
+            page: number;
+            /** @default 20 */
+            pageSize: number;
+            filters?: components["schemas"]["FlightSearchFilters"];
+        };
+        /**
+         * @description All filters are optional. Omitted filters and default-valued filters
+         *     are excluded from the server cache key, so wide-open searches share
+         *     cache entries.
+         */
+        FlightSearchFilters: {
+            priceRange?: components["schemas"]["PriceRange"];
+            /** @description Empty/omitted = all classes allowed. */
+            fareClasses?: components["schemas"]["FareClass"][];
+            departureMinutesRange?: components["schemas"]["MinuteRange"];
+            arrivalMinutesRange?: components["schemas"]["MinuteRange"];
+            /**
+             * @description System hard cap is 2.
+             * @default 2
+             */
+            maxStopovers: number;
+            /**
+             * @description Maximum total trip time (first leg depart → last leg arrive).
+             *     Omitted = no cap.
+             */
+            maxTotalTravelTimeHours?: number;
+        };
+        /** @description Inclusive price range in the response currency. */
+        PriceRange: {
+            min: number;
+            max: number;
+        };
+        /** @description Time-of-day range expressed as minutes since midnight (0–1439). */
+        MinuteRange: {
+            min: number;
+            max: number;
+        };
+        /** @enum {string} */
+        FareClass: "Economy" | "Comfort" | "Business";
+        /**
+         * @description Result ordering. `durationAsc` is **total trip time** ascending,
+         *     not sum of flight times.
+         * @default priceAsc
+         * @enum {string}
+         */
+        SortBy: "priceAsc" | "priceDesc" | "durationAsc" | "departureAsc";
+        /** @description One page of search results. */
+        FlightSearchResponse: {
+            page: number;
+            pageSize: number;
+            /**
+             * @description Size of the cached top-K result set (≤ 200). May be smaller than
+             *     200 if fewer itineraries matched. Not the total count of all
+             *     possible matches in the database.
+             */
+            totalResults: number;
+            totalPages: number;
+            results: components["schemas"]["Itinerary"][];
+        };
+        /**
+         * @description A sequence of one or more flight legs from origin to destination,
+         *     priced at a single fare class.
+         */
+        Itinerary: {
+            /**
+             * @description Stable identifier within the cached result set (deterministic
+             *     hash of leg sequence + fare class). Not durable across cache
+             *     evictions.
+             */
+            id: string;
+            fareClass: components["schemas"]["FareClass"];
+            /** @description Total price for one passenger at `fareClass`. */
+            price: number;
+            /**
+             * @default USD
+             * @example USD
+             */
+            currency: string;
+            /** @description First leg's departure → last leg's arrival. */
+            totalTripTimeMinutes: number;
+            /** @description Sum of leg durations. Excludes layovers. */
+            flightTimeMinutes: number;
+            totalLayoverMinutes: number;
+            /** @description Number of intermediate airports (`legs.length - 1`). */
+            stopovers: number;
+            legs: components["schemas"]["Leg"][];
+        };
+        /** @description One flight segment within an itinerary. */
+        Leg: {
+            /** @example BA178 */
+            flightNumber: string;
+            fromAirport: components["schemas"]["AirportSummary"];
+            toAirport: components["schemas"]["AirportSummary"];
+            /**
+             * Format: date-time
+             * @description UTC instant of scheduled departure.
+             */
+            departureAt: string;
+            /**
+             * Format: date-time
+             * @description UTC instant of scheduled arrival.
+             */
+            arrivalAt: string;
+            durationMinutes: number;
+            /**
+             * @description True when arrival lands on a later calendar day than departure
+             *     in the destination airport's local timezone. UI convenience.
+             */
+            nextDayArrival: boolean;
         };
         /**
          * @description RFC 7807 problem details. Returned with `Content-Type: application/problem+json`
@@ -121,6 +293,31 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["AirportSummary"][];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+        };
+    };
+    searchFlights: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["FlightSearchRequest"];
+            };
+        };
+        responses: {
+            /** @description Paginated search results. `results` may be empty. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FlightSearchResponse"];
                 };
             };
             400: components["responses"]["BadRequest"];

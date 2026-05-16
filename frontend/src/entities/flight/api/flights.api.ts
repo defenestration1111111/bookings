@@ -1,34 +1,14 @@
 import { fetchJson } from "../../../shared/api/client";
-import { SearchParams, FlightResult, FlightOption } from "../model/flight";
-
-function buildSearchQuery(params: SearchParams): string {
-  const query = new URLSearchParams();
-
-  query.set("from", params.from);
-  query.set("to", params.to);
-  query.set("departDate", params.departDate);
-  query.set("passengerCount", String(params.passengerCount));
-
-  if (params.tripType) query.set("tripType", params.tripType);
-  if (params.returnDate) query.set("returnDate", params.returnDate);
-  if (params.fareClass) query.set("fareClass", params.fareClass);
-
-  return query.toString();
-}
+import { FlightSearchRequest, FlightSearchResponse } from "../model/flight";
 
 export async function searchFlights(
-  params: SearchParams,
+  request: FlightSearchRequest,
   signal?: AbortSignal
-): Promise<FlightResult[]> {
-  return fetchJson<FlightResult[]>(
-    `/flights/search?${buildSearchQuery(params)}`,
-    { signal }
-  );
-}
-
-export async function getFlightById(
-  id: number,
-  signal?: AbortSignal
-): Promise<FlightOption> {
-  return fetchJson<FlightOption>(`/flights/${id}`, { signal });
+): Promise<FlightSearchResponse> {
+  return fetchJson<FlightSearchResponse>("/flights/search", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(request),
+    signal,
+  });
 }
