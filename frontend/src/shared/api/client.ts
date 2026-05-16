@@ -10,6 +10,13 @@ export class ApiError extends Error {
   }
 }
 
+export class TimeoutError extends Error {
+  constructor(public readonly timeoutMs: number) {
+    super(`Request timed out after ${timeoutMs} ms`);
+    this.name = "TimeoutError";
+  }
+}
+
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? "/api";
 
 function buildApiUrl(path: string): string {
@@ -67,21 +74,18 @@ async function fetchWithTimeout(
   timeoutMs: number,
   callerSignal?: AbortSignal
 ): Promise<Response> {
-  // Combine caller's abort signal with our timeout signal
-  const controllers: AbortController[] = [];
-
   const signals: AbortSignal[] = [];
   if (callerSignal) signals.push(callerSignal);
 
+  let timeoutSignal: AbortSignal | undefined;
   let timeoutId: ReturnType<typeof setTimeout> | undefined;
   if (timeoutMs > 0) {
     const timeoutController = new AbortController();
-    controllers.push(timeoutController);
-    signals.push(timeoutController.signal);
+    timeoutSignal = timeoutController.signal;
+    signals.push(timeoutSignal);
     timeoutId = setTimeout(() => timeoutController.abort(), timeoutMs);
   }
 
-  // AbortSignal.any() is available in all modern browsers & Node 20+
   const combinedSignal =
     signals.length === 0
       ? undefined
@@ -91,6 +95,16 @@ async function fetchWithTimeout(
 
   try {
     return await fetch(url, { ...init, signal: combinedSignal });
+  } catch (err) {
+    if (
+      err instanceof DOMException &&
+      err.name === "AbortError" &&
+      timeoutSignal?.aborted &&
+      !callerSignal?.aborted
+    ) {
+      throw new TimeoutError(timeoutMs);
+    }
+    throw err;
   } finally {
     clearTimeout(timeoutId);
   }
@@ -128,6 +142,9 @@ export async function fetchJson<T>(
 
       // Don't retry aborted requests — the caller explicitly cancelled
       if (isAbort) throw err;
+
+      // Don't retry timeouts — backing off won't make a slow server faster
+      if (err instanceof TimeoutError) throw err;
 
       // Retry transient network errors (no response at all)
       if (attempt <= retries) {
