@@ -3,16 +3,21 @@ import { useTranslation } from "react-i18next";
 import { FareClass } from "../../../entities/flight/model/flight";
 import { Range } from "../../../shared/types/common";
 import DoubleRange from "../../../shared/ui/DoubleRange";
+import { PRICE_MAX, PRICE_MIN } from "../model/useFlightFilters";
 
 type FlightFiltersProps = {
   priceRange: Range;
   departureRange: Range;
   arrivalRange: Range;
   fareClasses: FareClass[];
+  maxStopovers: number;
+  maxTravelHours: number | null;
   onPriceRange: (range: Range) => void;
   onDepartureRange: (range: Range) => void;
   onArrivalRange: (range: Range) => void;
   onFareClass: (fareClass: FareClass) => void;
+  onMaxStopovers: (n: number) => void;
+  onMaxTravelHours: (h: number | null) => void;
 };
 
 function formatTime(minutes: number) {
@@ -27,20 +32,33 @@ export default function FlightFilters({
   arrivalRange,
   departureRange,
   fareClasses,
+  maxStopovers,
+  maxTravelHours,
   onArrivalRange,
   onDepartureRange,
   onFareClass,
   onPriceRange,
-  priceRange
+  priceRange,
+  onMaxStopovers,
+  onMaxTravelHours,
 }: FlightFiltersProps) {
   const { t } = useTranslation();
   const [draftPriceRange, setDraftPriceRange] = useState(priceRange);
   const [draftDepartureRange, setDraftDepartureRange] = useState(departureRange);
   const [draftArrivalRange, setDraftArrivalRange] = useState(arrivalRange);
+  const [draftTravelHours, setDraftTravelHours] = useState<number>(
+    maxTravelHours ?? 24
+  );
 
   useEffect(() => setDraftPriceRange(priceRange), [priceRange]);
   useEffect(() => setDraftDepartureRange(departureRange), [departureRange]);
   useEffect(() => setDraftArrivalRange(arrivalRange), [arrivalRange]);
+  useEffect(
+    () => setDraftTravelHours(maxTravelHours ?? 24),
+    [maxTravelHours]
+  );
+
+  const travelHoursEnabled = maxTravelHours != null;
 
   return (
     <aside className="w-full md:w-64 flex-shrink-0">
@@ -51,9 +69,9 @@ export default function FlightFilters({
           </h3>
 
           <DoubleRange
-            max={1200}
-            min={200}
-            step={10}
+            max={PRICE_MAX}
+            min={PRICE_MIN}
+            step={500}
             tone="rausch"
             range={draftPriceRange}
             onChange={setDraftPriceRange}
@@ -61,11 +79,11 @@ export default function FlightFilters({
           />
 
           <div className="flex justify-between font-body-sm text-body-sm text-muted">
-            <span>${draftPriceRange[0]}</span>
+            <span>${draftPriceRange[0].toLocaleString()}</span>
             <span>
-              {draftPriceRange[1] >= 1200
-                ? "$1,200+"
-                : `$${draftPriceRange[1]}`}
+              {draftPriceRange[1] >= PRICE_MAX
+                ? `$${PRICE_MAX.toLocaleString()}+`
+                : `$${draftPriceRange[1].toLocaleString()}`}
             </span>
           </div>
         </div>
@@ -150,6 +168,77 @@ export default function FlightFilters({
               )
             )}
           </div>
+        </div>
+
+        <hr className="border-hairline-soft" />
+
+        <div>
+          <h3 className="font-title-md text-title-md text-ink mb-4">Stops</h3>
+
+          <div className="space-y-3">
+            {[
+              { value: 0, label: "Direct only" },
+              { value: 1, label: "Up to 1 stop" },
+              { value: 2, label: "Up to 2 stops" },
+            ].map((opt) => (
+              <label
+                key={opt.value}
+                className="flex items-center gap-3 cursor-pointer"
+              >
+                <input
+                  type="radio"
+                  name="maxStopovers"
+                  checked={maxStopovers === opt.value}
+                  onChange={() => onMaxStopovers(opt.value)}
+                  className="w-5 h-5 border-border-strong text-rausch focus:ring-rausch"
+                />
+                <span className="font-body-sm text-body-sm text-ink">
+                  {opt.label}
+                </span>
+              </label>
+            ))}
+          </div>
+        </div>
+
+        <hr className="border-hairline-soft" />
+
+        <div>
+          <h3 className="font-title-md text-title-md text-ink mb-4">
+            Max travel time
+          </h3>
+
+          <label className="flex items-center gap-3 cursor-pointer mb-3">
+            <input
+              type="checkbox"
+              checked={travelHoursEnabled}
+              onChange={(e) =>
+                onMaxTravelHours(e.target.checked ? draftTravelHours : null)
+              }
+              className="w-5 h-5 rounded border-border-strong text-rausch focus:ring-rausch"
+            />
+            <span className="font-body-sm text-body-sm text-ink">
+              Limit total trip time
+            </span>
+          </label>
+
+          {travelHoursEnabled && (
+            <>
+              <input
+                type="range"
+                min={1}
+                max={60}
+                step={1}
+                value={draftTravelHours}
+                onChange={(e) => setDraftTravelHours(Number(e.target.value))}
+                onMouseUp={() => onMaxTravelHours(draftTravelHours)}
+                onTouchEnd={() => onMaxTravelHours(draftTravelHours)}
+                className="w-full accent-rausch"
+              />
+              <div className="font-body-sm text-body-sm text-muted">
+                Up to {draftTravelHours}h
+              </div>
+            </>
+          )}
         </div>
       </div>
     </aside>

@@ -24,6 +24,8 @@ export function StepSeating({ legIndex, totalLegs, onNext, onBack }: Props) {
   const { selectedFlight, passengers, setSeatsForLeg } = useBookingContext();
   const leg = selectedFlight!.legs[legIndex];
   const { seats, layout, loading } = useSeatSelection(selectedFlight!.id);
+  const fromCode = leg.fromAirport.airportCode;
+  const toCode = leg.toAirport.airportCode;
   const { assign, getAssignments, getSeatIdsForLeg } = useSeatAssignments(totalLegs);
 
   const [pendingSeat, setPendingSeat] = useState<Seat | null>(null);
@@ -60,10 +62,10 @@ export function StepSeating({ legIndex, totalLegs, onNext, onBack }: Props) {
         <div className="w-full mb-6 flex items-center justify-between">
           <div>
             <p className="font-display-md text-display-md text-ink">
-              {leg.from} → {leg.to}
+              {fromCode} → {toCode}
             </p>
             <p className="font-body-sm text-body-sm text-muted mt-0.5">
-              {leg.departTime} · {leg.duration}
+              {new Date(leg.departureAt).toISOString().slice(11, 16)} · {leg.durationMinutes}m
             </p>
           </div>
           {totalLegs > 1 && (

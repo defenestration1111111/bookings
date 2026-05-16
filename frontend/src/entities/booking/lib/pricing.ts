@@ -1,13 +1,13 @@
-import { FlightOption } from "../../flight/model/flight";
+import { Itinerary } from "../../flight/model/flight";
 
 export const DEFAULT_BAGGAGE_FEE = 50;
 export const DEFAULT_TAXES = 85.5;
 
 export function calculateBookingPrice(
-  flight: FlightOption,
+  itinerary: Itinerary,
   passengerCount: number
 ) {
-  const fareTotal = flight.price * passengerCount;
+  const fareTotal = itinerary.price * passengerCount;
   const total = fareTotal + DEFAULT_TAXES + DEFAULT_BAGGAGE_FEE;
 
   return {

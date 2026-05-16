@@ -1,12 +1,12 @@
 import { useTranslation } from "react-i18next";
 import { calculateBookingPrice } from "../lib/pricing";
-import { FlightOption } from "../../flight/model/flight";
+import { Itinerary } from "../../flight/model/flight";
 
 const flightSummaryImage =
   "https://lh3.googleusercontent.com/aida-public/AB6AXuD3yCyUpoPo7aJ4wMokwil0c01-EqbtGErqDWRzjmmgn8AkjyTmTw7f5vF4MvJm7DZMwCEeZK9j80-EWH9cbDvEwRL3eAlDix7DA4wdloHglwQke52WMW9enuGHFkncr3QKSfYsxCkj5jZrH7wHA_jzUMvsYJjm4chuSUSoqFkDkEfpknI2w8qjRrASTcWt0JZ8PLtK4h2gyzxl9WT6Ax0h1Awj06jv0vtMUA6TkJ9JYV2rGsXMwj_ZZUSP5sjYvVK8LOq4yTzKK20";
 
 type PriceSummaryProps = {
-  flight: FlightOption;
+  flight: Itinerary;
   passengerCount: number;
 };
 
@@ -14,6 +14,7 @@ export function PriceSummary({ flight, passengerCount }: PriceSummaryProps) {
   const { t } = useTranslation();
 
   const firstLeg = flight.legs[0];
+  const lastLeg = flight.legs[flight.legs.length - 1];
   const { fareTotal, taxes, baggageFee, total } = calculateBookingPrice(
     flight,
     passengerCount
@@ -37,8 +38,8 @@ export function PriceSummary({ flight, passengerCount }: PriceSummaryProps) {
             </p>
             <p className="font-body-md text-body-md text-ink mt-xs">
               {t("booking.priceSummary.to", {
-                from: firstLeg.from,
-                to: firstLeg.to,
+                from: firstLeg.fromAirport.airportCode,
+                to: lastLeg.toAirport.airportCode,
               })}
             </p>
           </div>

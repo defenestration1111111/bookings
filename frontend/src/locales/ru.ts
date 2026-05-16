@@ -23,6 +23,8 @@ export const ru = {
     noFlights: "Нет рейсов по этим фильтрам.",
     offersFrom: "предложений от",
     select: "Выбрать",
+    error: "Не удалось загрузить рейсы. Попробуйте ещё раз.",
+    retry: "Повторить",
     filters: {
       priceRange: "Диапазон цен",
       time: "Время",

@@ -23,6 +23,8 @@ export const en = {
     noFlights: "No flights match your filters.",
     offersFrom: "offers from",
     select: "Select",
+    error: "Couldn't load flights. Please try again.",
+    retry: "Retry",
     filters: {
       priceRange: "Price range",
       time: "Time",

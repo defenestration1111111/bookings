@@ -1,7 +1,7 @@
 import { PassengerInfo } from "../../passenger/model/passenger";
 
 export type BookingDetails = {
-  flightId: number;
+  flightId: string;
   passengers: PassengerInfo[];
   selectedSeatIds: string[];
 };
