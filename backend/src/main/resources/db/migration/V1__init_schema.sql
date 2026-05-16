@@ -510,6 +510,7 @@ CREATE TABLE bookings.segments (
     flight_id integer NOT NULL,
     fare_conditions text NOT NULL,
     price numeric(10,2) NOT NULL,
+    seat_no text NOT NULL,
     CONSTRAINT segments_fare_conditions_check CHECK ((fare_conditions = ANY (ARRAY['Economy'::text, 'Comfort'::text, 'Business'::text]))),
     CONSTRAINT segments_price_check CHECK ((price >= (0)::numeric))
 );
@@ -548,6 +549,13 @@ COMMENT ON COLUMN bookings.segments.fare_conditions IS 'Travel class';
 --
 
 COMMENT ON COLUMN bookings.segments.price IS 'Travel price';
+
+
+--
+-- Name: COLUMN segments.seat_no; Type: COMMENT; Schema: bookings; Owner: -
+--
+
+COMMENT ON COLUMN bookings.segments.seat_no IS 'Seat assigned at booking time. One seat per (flight_id, seat_no).';
 
 
 --
@@ -824,6 +832,14 @@ ALTER TABLE ONLY bookings.segments
 
 
 --
+-- Name: segments segments_flight_id_seat_no_key; Type: CONSTRAINT; Schema: bookings; Owner: -
+--
+
+ALTER TABLE ONLY bookings.segments
+    ADD CONSTRAINT segments_flight_id_seat_no_key UNIQUE (flight_id, seat_no);
+
+
+--
 -- Name: tickets tickets_book_ref_passenger_id_outbound_key; Type: CONSTRAINT; Schema: bookings; Owner: -
 --
 
@@ -915,3 +931,78 @@ ALTER TABLE ONLY bookings.segments
 
 ALTER TABLE ONLY bookings.tickets
     ADD CONSTRAINT tickets_book_ref_fkey FOREIGN KEY (book_ref) REFERENCES bookings.bookings(book_ref);
+
+
+--
+-- Name: route_fares; Type: TABLE; Schema: bookings; Owner: -
+--
+-- Base fare per (route, fare class), derived from historical segments by the
+-- demo loader. Serves as the price source for flight search.
+--
+-- No FK to bookings.routes(route_no): routes are keyed by (route_no, validity)
+-- in this schema (a route can have multiple non-overlapping validity periods).
+-- A single fare applies across all validity periods of a route_no.
+--
+
+CREATE TABLE bookings.route_fares (
+    route_no text NOT NULL,
+    fare_conditions text NOT NULL,
+    price numeric(10,2) NOT NULL,
+    CONSTRAINT route_fares_fare_conditions_check CHECK ((fare_conditions = ANY (ARRAY['Economy'::text, 'Comfort'::text, 'Business'::text]))),
+    CONSTRAINT route_fares_price_check CHECK ((price > (0)::numeric))
+);
+
+
+COMMENT ON TABLE bookings.route_fares IS 'Base fare per (route, fare class), populated by the demo loader from historical segments.';
+
+COMMENT ON COLUMN bookings.route_fares.route_no IS 'Route number';
+COMMENT ON COLUMN bookings.route_fares.fare_conditions IS 'Travel class';
+COMMENT ON COLUMN bookings.route_fares.price IS 'Base price in route currency';
+
+
+ALTER TABLE ONLY bookings.route_fares
+    ADD CONSTRAINT route_fares_pkey PRIMARY KEY (route_no, fare_conditions);
+
+
+--
+-- Name: airplane_price_factors; Type: TABLE; Schema: bookings; Owner: -
+--
+-- Per-airplane price multipliers with non-overlapping date validity.
+-- The search query LEFT JOINs this and COALESCE-s a missing factor to 1.0,
+-- so an empty table means "no airplane has a multiplier yet" and pricing
+-- falls through to the raw route_fares.price.
+--
+
+CREATE TABLE bookings.airplane_price_factors (
+    airplane_code character(3) NOT NULL,
+    valid_from date NOT NULL,
+    valid_to date,
+    price_multiplier numeric(6,3) NOT NULL,
+    CONSTRAINT airplane_price_factors_multiplier_check CHECK ((price_multiplier > (0)::numeric)),
+    CONSTRAINT airplane_price_factors_validity_check CHECK ((valid_to IS NULL OR valid_to > valid_from))
+);
+
+
+COMMENT ON TABLE bookings.airplane_price_factors IS 'Per-airplane price multipliers, time-bounded. Missing rows treated as multiplier 1.0 by the search query.';
+
+COMMENT ON COLUMN bookings.airplane_price_factors.airplane_code IS 'Airplane code, IATA';
+COMMENT ON COLUMN bookings.airplane_price_factors.valid_from IS 'Inclusive lower bound of validity (date)';
+COMMENT ON COLUMN bookings.airplane_price_factors.valid_to IS 'Exclusive upper bound of validity (date); NULL = open-ended';
+COMMENT ON COLUMN bookings.airplane_price_factors.price_multiplier IS 'Multiplier applied to base route fare for this airplane in this period';
+
+
+ALTER TABLE ONLY bookings.airplane_price_factors
+    ADD CONSTRAINT airplane_price_factors_pkey PRIMARY KEY (airplane_code, valid_from);
+
+
+ALTER TABLE ONLY bookings.airplane_price_factors
+    ADD CONSTRAINT airplane_price_factors_no_overlap_excl
+    EXCLUDE USING gist (
+        airplane_code WITH =,
+        daterange(valid_from, valid_to, '[)') WITH &&
+    );
+
+
+ALTER TABLE ONLY bookings.airplane_price_factors
+    ADD CONSTRAINT airplane_price_factors_airplane_code_fkey
+    FOREIGN KEY (airplane_code) REFERENCES bookings.airplanes(airplane_code);
