@@ -1,0 +1,828 @@
+openapi: 3.1.0
+
+info:
+  title: Airlines Bookings API
+  version: 0.1.0
+  description: |
+    Internal API for the bookings learning project. Endpoints are added per
+    feature slice — see the empty `paths` block. This file is the source of
+    truth: hand-written here, frontend TypeScript types are generated from it
+    via `openapi-typescript`, Spring controllers are hand-written to match.
+
+    ## Conventions
+
+    **Base path.** Every endpoint sits under `/api`. Vite proxies `/api/*` from
+    the frontend dev server to Spring during development; production proxies
+    do the same.
+
+    **URL style.** Plural resources (`/airports`, `/flights`, `/bookings`).
+    Search and action endpoints sit as a sub-resource of the noun
+    (`/api/flights/search`), not as verbs.
+
+    **Errors.** RFC 7807 `application/problem+json` for every non-2xx response.
+    Validation failures extend the base shape with an `errors` array — see
+    `ValidationProblem`.
+
+    **Dates and times.** ISO 8601. Instants are always UTC with trailing `Z`
+    (`format: date-time`). Calendar dates use `format: date`. Airport timezone
+    is a separate string field; the frontend formats UTC instants for display.
+
+servers:
+  - url: /api
+    description: Default deployment — frontend dev server proxies `/api/*` to Spring.
+
+tags:
+  - name: airports
+    description: Airport lookup and search.
+  - name: flights
+    description: Flight search and detail.
+  - name: seats
+    description: Seat maps for flights.
+  - name: bookings
+    description: Booking creation and lookup.
+
+# Endpoints are added per feature slice. Order: airport search → flight search
+# → flight detail + seat map → booking creation → booking lookup.
+paths:
+
+  /airports/search:
+    get:
+      tags: [airports]
+      operationId: searchAirports
+      summary: Typeahead search for airports.
+      description: |
+        Ranks results across multiple match tiers (exact code → code prefix →
+        city prefix → city substring → fuzzy/trigram on city), returning up to
+        `limit` results sorted by tier, then alphabetically by city. Fuzzy
+        tier only fires for queries of length ≥ 3.
+
+        An empty/whitespace `q` returns the top `limit` airports alphabetically
+        by city — used to populate the typeahead dropdown on input focus.
+      parameters:
+        - name: q
+          in: query
+          required: true
+          description: Search text. Empty string is valid (returns top-N).
+          schema:
+            type: string
+            maxLength: 100
+        - name: limit
+          in: query
+          required: false
+          description: Maximum number of results.
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 50
+            default: 10
+      responses:
+        '200':
+          description: Matching airports, possibly empty.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/AirportSummary'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+
+  /flights/search:
+    post:
+      tags: [flights]
+      operationId: searchFlights
+      summary: Search for flight itineraries (one-way).
+      description: |
+        Returns a paginated, sorted list of itineraries from `origin` to
+        `destination` on `departureDate`. An itinerary may be direct or
+        include up to `filters.maxStopovers` connections (system hard cap: 2).
+
+        The server computes the top-200 matches for the
+        `(route, date, filters, sortBy)` tuple, caches them, and slices
+        `page`/`pageSize` from that cache. `totalResults` reflects the size
+        of the cached top-K, not the total count of all possible matches in
+        the database.
+
+        When `filters.fareClasses` is empty or omitted, each itinerary is
+        priced at its cheapest available class; the row's `fareClass` field
+        identifies which class produced that price. When `fareClasses` is
+        set, itineraries are filtered to those offering at least one of the
+        requested classes and priced at the cheapest of those.
+
+        Sort mode `durationAsc` orders by **total trip time** (first leg
+        depart → last leg arrive), not by sum of flight times.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/FlightSearchRequest'
+      responses:
+        '200':
+          description: Paginated search results. `results` may be empty.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FlightSearchResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+
+  /bookings:
+    post:
+      tags: [bookings]
+      operationId: createBooking
+      summary: Create a booking (single passenger, one or more legs).
+      description: |
+        Atomically inserts one `bookings` row, one `tickets` row, and one
+        `segments` row per leg, then returns the persisted booking. All
+        prices are recomputed server-side from
+        `route_fares × airplane_price_factor` for the leg's fare class —
+        the request does not carry prices.
+
+        Multi-passenger bookings are a future slice. This endpoint accepts
+        exactly one passenger; `tickets.outbound` is set to `true` for the
+        single ticket created (round-trip search is also future work, so
+        the outbound/return split is not yet exposed).
+
+        **Concurrency.** The unique constraint
+        `segments (flight_id, seat_no)` is the only seat-locking mechanism
+        in this slice: concurrent bookings of the same seat race to the
+        first INSERT; the loser receives a `409` with a list of seats that
+        clashed and is expected to refetch the seat map and repick. A
+        soft-hold table (`seat_holds`) is a planned follow-up.
+
+        **Payment.** Card details are validated for format and discarded.
+        They are not transmitted, persisted, or processed.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BookingRequest'
+      responses:
+        '201':
+          description: Booking created.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BookingResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          description: |
+            One or more `flightId`s do not exist.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        '409':
+          description: |
+            One or more requested seats were taken by another booking
+            between seat-map load and submit, or a flight in the request
+            is no longer in a bookable status. `conflicts` enumerates the
+            per-leg problems.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/SeatConflictProblem'
+
+  /flights/{flightId}/seats:
+    get:
+      tags: [seats]
+      operationId: getSeatMap
+      summary: Seat map for a specific flight.
+      description: |
+        Returns the airframe, the cabin layout (column letters and aisle
+        positions), and every seat on the aircraft for the given flight,
+        with each seat marked `unavailable: true` if it has already been
+        booked. Each seat carries the price for its fare class on this
+        flight, computed the same way as flight search
+        (`route_fares.price × airplane_price_factor`).
+
+        Seats in fare classes that are not sold on this route (no matching
+        `route_fares` row) are omitted from the response entirely — they
+        physically exist on the airframe but cannot be booked for this
+        flight.
+
+        Refuses with `409` for flights in a status that does not allow seat
+        selection (anything other than `Scheduled`, `On Time`, `Delayed`,
+        `Boarding`).
+      parameters:
+        - name: flightId
+          in: path
+          required: true
+          description: Flight ID.
+          schema:
+            type: integer
+            minimum: 1
+      responses:
+        '200':
+          description: Seat map for the flight.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SeatMapResponse'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+
+components:
+  schemas:
+    AirportSummary:
+      type: object
+      description: Minimal airport representation for typeahead and selection UIs.
+      properties:
+        airportCode:
+          type: string
+          minLength: 3
+          maxLength: 3
+          pattern: '^[A-Z]{3}$'
+          example: "LHR"
+          description: IATA airport code.
+        city:
+          type: string
+          example: "London"
+          description: City name.
+      required: [airportCode, city]
+
+    FlightSearchRequest:
+      type: object
+      description: Search parameters and filters for flight itinerary lookup.
+      properties:
+        origin:
+          type: string
+          pattern: '^[A-Z]{3}$'
+          example: "LHR"
+          description: IATA code of the origin airport.
+        destination:
+          type: string
+          pattern: '^[A-Z]{3}$'
+          example: "JFK"
+          description: IATA code of the destination airport.
+        departureDate:
+          type: string
+          format: date
+          example: "2026-06-15"
+          description: Calendar date of departure at the origin airport (local).
+        passengerCount:
+          type: integer
+          minimum: 1
+          maximum: 9
+          default: 1
+        sortBy:
+          $ref: '#/components/schemas/SortBy'
+        page:
+          type: integer
+          minimum: 0
+          default: 0
+          description: Zero-based page index.
+        pageSize:
+          type: integer
+          minimum: 1
+          maximum: 50
+          default: 20
+        filters:
+          $ref: '#/components/schemas/FlightSearchFilters'
+      required: [origin, destination, departureDate]
+
+    FlightSearchFilters:
+      type: object
+      description: |
+        All filters are optional. Omitted filters and default-valued filters
+        are excluded from the server cache key, so wide-open searches share
+        cache entries.
+      properties:
+        priceRange:
+          $ref: '#/components/schemas/PriceRange'
+        fareClasses:
+          type: array
+          uniqueItems: true
+          items:
+            $ref: '#/components/schemas/FareClass'
+          description: Empty/omitted = all classes allowed.
+        departureMinutesRange:
+          $ref: '#/components/schemas/MinuteRange'
+        arrivalMinutesRange:
+          $ref: '#/components/schemas/MinuteRange'
+        maxStopovers:
+          type: integer
+          minimum: 0
+          maximum: 2
+          default: 2
+          description: System hard cap is 2.
+        maxTotalTravelTimeHours:
+          type: integer
+          minimum: 1
+          maximum: 60
+          description: |
+            Maximum total trip time (first leg depart → last leg arrive).
+            Omitted = no cap.
+
+    PriceRange:
+      type: object
+      description: Inclusive price range in the response currency.
+      properties:
+        min:
+          type: number
+          minimum: 0
+        max:
+          type: number
+          minimum: 0
+      required: [min, max]
+
+    MinuteRange:
+      type: object
+      description: Time-of-day range expressed as minutes since midnight (0–1439).
+      properties:
+        min:
+          type: integer
+          minimum: 0
+          maximum: 1439
+        max:
+          type: integer
+          minimum: 0
+          maximum: 1439
+      required: [min, max]
+
+    FareClass:
+      type: string
+      enum: [Economy, Comfort, Business]
+
+    SortBy:
+      type: string
+      description: |
+        Result ordering. `durationAsc` is **total trip time** ascending,
+        not sum of flight times.
+      enum:
+        - priceAsc
+        - priceDesc
+        - durationAsc
+        - departureAsc
+      default: priceAsc
+
+    FlightSearchResponse:
+      type: object
+      description: One page of search results.
+      properties:
+        page:
+          type: integer
+          minimum: 0
+        pageSize:
+          type: integer
+          minimum: 1
+        totalResults:
+          type: integer
+          minimum: 0
+          description: |
+            Size of the cached top-K result set (≤ 200). May be smaller than
+            200 if fewer itineraries matched. Not the total count of all
+            possible matches in the database.
+        totalPages:
+          type: integer
+          minimum: 0
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/Itinerary'
+      required: [page, pageSize, totalResults, totalPages, results]
+
+    Itinerary:
+      type: object
+      description: |
+        A sequence of one or more flight legs from origin to destination,
+        priced at a single fare class.
+      properties:
+        id:
+          type: string
+          description: |
+            Stable identifier within the cached result set (deterministic
+            hash of leg sequence + fare class). Not durable across cache
+            evictions.
+        fareClass:
+          $ref: '#/components/schemas/FareClass'
+        price:
+          type: number
+          minimum: 0
+          description: Total price for one passenger at `fareClass`.
+        currency:
+          type: string
+          example: "USD"
+          default: "USD"
+        totalTripTimeMinutes:
+          type: integer
+          minimum: 0
+          description: First leg's departure → last leg's arrival.
+        flightTimeMinutes:
+          type: integer
+          minimum: 0
+          description: Sum of leg durations. Excludes layovers.
+        totalLayoverMinutes:
+          type: integer
+          minimum: 0
+        stopovers:
+          type: integer
+          minimum: 0
+          maximum: 2
+          description: Number of intermediate airports (`legs.length - 1`).
+        legs:
+          type: array
+          minItems: 1
+          items:
+            $ref: '#/components/schemas/Leg'
+      required:
+        - id
+        - fareClass
+        - price
+        - currency
+        - totalTripTimeMinutes
+        - flightTimeMinutes
+        - totalLayoverMinutes
+        - stopovers
+        - legs
+
+    Leg:
+      type: object
+      description: One flight segment within an itinerary.
+      properties:
+        flightId:
+          type: integer
+          minimum: 1
+          description: |
+            Durable identifier of the underlying `bookings.flights` row.
+            Used by the seat-map endpoint (`/flights/{flightId}/seats`).
+        flightNumber:
+          type: string
+          example: "BA178"
+        fromAirport:
+          $ref: '#/components/schemas/AirportSummary'
+        toAirport:
+          $ref: '#/components/schemas/AirportSummary'
+        departureAt:
+          type: string
+          format: date-time
+          description: UTC instant of scheduled departure.
+        arrivalAt:
+          type: string
+          format: date-time
+          description: UTC instant of scheduled arrival.
+        durationMinutes:
+          type: integer
+          minimum: 0
+        nextDayArrival:
+          type: boolean
+          description: |
+            True when arrival lands on a later calendar day than departure
+            in the destination airport's local timezone. UI convenience.
+      required:
+        - flightId
+        - flightNumber
+        - fromAirport
+        - toAirport
+        - departureAt
+        - arrivalAt
+        - durationMinutes
+        - nextDayArrival
+
+    AirplaneSummary:
+      type: object
+      description: Minimal airframe representation for the seat map.
+      properties:
+        code:
+          type: string
+          minLength: 3
+          maxLength: 3
+          example: "32N"
+          description: Airplane code, IATA.
+        model:
+          type: string
+          example: "Airbus A320neo"
+          description: Airplane model.
+      required: [code, model]
+
+    SeatLayout:
+      type: object
+      description: |
+        Cabin layout for the seat-map renderer. `columns` is the ordered set
+        of seat-letter columns present on the airframe (derived from the
+        seats table). `aisles_after` lists the column letters after which
+        the renderer should draw an aisle gap.
+      properties:
+        columns:
+          type: array
+          items:
+            type: string
+            minLength: 1
+            maxLength: 1
+            pattern: '^[A-Z]$'
+          example: ["A", "B", "C", "D", "E", "F"]
+        aisles_after:
+          type: array
+          items:
+            type: string
+            minLength: 1
+            maxLength: 1
+            pattern: '^[A-Z]$'
+          example: ["C"]
+          description: |
+            Ordered subset of `columns`. Empty array is valid (renderer
+            draws no aisle gap).
+      required: [columns, aisles_after]
+
+    Seat:
+      type: object
+      description: A single seat on the aircraft for this flight.
+      properties:
+        id:
+          type: string
+          example: "11D"
+          description: Seat identifier, equivalent to `row` concatenated with `letter`.
+        row:
+          type: integer
+          minimum: 1
+          example: 11
+        letter:
+          type: string
+          minLength: 1
+          maxLength: 1
+          pattern: '^[A-Z]$'
+          example: "D"
+        seatClass:
+          $ref: '#/components/schemas/FareClass'
+        unavailable:
+          type: boolean
+          description: |
+            True when the seat is already booked on this flight (a row exists
+            in `segments` for `(flight_id, seat_no)`). Omitted/false when
+            free.
+        price:
+          type: number
+          minimum: 0
+          description: |
+            Price for this seat on this flight, equal to the flight's
+            per-class price (`route_fares.price × airplane_price_factor`)
+            for the seat's `seatClass`.
+      required: [id, row, letter, seatClass, price]
+
+    SeatMapResponse:
+      type: object
+      description: Seat map for a specific flight.
+      properties:
+        airplane:
+          $ref: '#/components/schemas/AirplaneSummary'
+        layout:
+          $ref: '#/components/schemas/SeatLayout'
+        seats:
+          type: array
+          items:
+            $ref: '#/components/schemas/Seat'
+      required: [airplane, layout, seats]
+
+    BookingRequest:
+      type: object
+      description: |
+        Single-passenger, multi-leg booking. `legs` carries one entry per
+        flight in the chosen itinerary, in departure order.
+      properties:
+        passenger:
+          $ref: '#/components/schemas/PassengerInfo'
+        legs:
+          type: array
+          minItems: 1
+          maxItems: 3
+          items:
+            $ref: '#/components/schemas/BookingLegRequest'
+        payment:
+          $ref: '#/components/schemas/MockPayment'
+      required: [passenger, legs, payment]
+
+    BookingLegRequest:
+      type: object
+      properties:
+        flightId:
+          type: integer
+          minimum: 1
+        seatNo:
+          type: string
+          pattern: '^[0-9]+[A-Z]$'
+          example: "12A"
+      required: [flightId, seatNo]
+
+    PassengerInfo:
+      type: object
+      properties:
+        firstName:
+          type: string
+          minLength: 1
+          maxLength: 100
+        lastName:
+          type: string
+          minLength: 1
+          maxLength: 100
+      required: [firstName, lastName]
+
+    MockPayment:
+      type: object
+      description: |
+        Mock payment details. Validated for format only; never persisted or
+        sent to a payment processor. The presence of well-formed values
+        stands in for an actual payment-gateway success.
+      properties:
+        cardNumber:
+          type: string
+          pattern: '^[0-9 ]{12,23}$'
+          description: 12–19 digits; spaces tolerated.
+        expiration:
+          type: string
+          pattern: '^(0[1-9]|1[0-2])/[0-9]{2}$'
+          example: "08/29"
+        cvv:
+          type: string
+          pattern: '^[0-9]{3,4}$'
+      required: [cardNumber, expiration, cvv]
+
+    BookingResponse:
+      type: object
+      description: |
+        Confirmation of a completed booking. Mirrors the persisted rows:
+        one `bookings`, one `tickets`, one `segments` per leg.
+      properties:
+        bookRef:
+          type: string
+          minLength: 6
+          maxLength: 6
+          example: "X3F9KQ"
+          description: Booking reference (6-char uppercase alphanumeric).
+        bookDate:
+          type: string
+          format: date-time
+          description: UTC instant the booking was created.
+        totalAmount:
+          type: number
+          minimum: 0
+          description: Sum of segment prices.
+        currency:
+          type: string
+          example: "USD"
+          default: "USD"
+        passenger:
+          $ref: '#/components/schemas/PassengerInfo'
+        ticketNo:
+          type: string
+          example: "0005432900987"
+          description: Ticket number for the single passenger.
+        segments:
+          type: array
+          minItems: 1
+          items:
+            $ref: '#/components/schemas/BookedSegment'
+      required:
+        - bookRef
+        - bookDate
+        - totalAmount
+        - currency
+        - passenger
+        - ticketNo
+        - segments
+
+    BookedSegment:
+      type: object
+      description: One leg of the confirmed booking, in departure order.
+      properties:
+        flightId:
+          type: integer
+          minimum: 1
+        flightNumber:
+          type: string
+          example: "PG0078"
+        fromAirport:
+          $ref: '#/components/schemas/AirportSummary'
+        toAirport:
+          $ref: '#/components/schemas/AirportSummary'
+        departureAt:
+          type: string
+          format: date-time
+        arrivalAt:
+          type: string
+          format: date-time
+        fareConditions:
+          $ref: '#/components/schemas/FareClass'
+        seatNo:
+          type: string
+        price:
+          type: number
+          minimum: 0
+          description: Server-recomputed price for this segment.
+      required:
+        - flightId
+        - flightNumber
+        - fromAirport
+        - toAirport
+        - departureAt
+        - arrivalAt
+        - fareConditions
+        - seatNo
+        - price
+
+    SeatConflictProblem:
+      description: |
+        Extension of `Problem` returned (HTTP 409) when one or more
+        requested seats are no longer available, or a flight in the
+        request is no longer in a bookable status. `conflicts` enumerates
+        the per-leg problems so the client can mark and refetch only the
+        affected legs.
+      allOf:
+        - $ref: '#/components/schemas/Problem'
+        - type: object
+          properties:
+            conflicts:
+              type: array
+              minItems: 1
+              items:
+                type: object
+                properties:
+                  flightId:
+                    type: integer
+                    minimum: 1
+                  seatNo:
+                    type: string
+                    description: |
+                      Seat that clashed (when `reason = seatTaken`). Omitted
+                      when the conflict is `flightNotBookable`.
+                  reason:
+                    type: string
+                    enum: [seatTaken, flightNotBookable]
+                required: [flightId, reason]
+          required: [conflicts]
+
+    Problem:
+      type: object
+      description: |
+        RFC 7807 problem details. Returned with `Content-Type: application/problem+json`
+        for every non-2xx response.
+      properties:
+        type:
+          type: string
+          format: uri
+          default: "about:blank"
+          description: URI identifying the problem type.
+        title:
+          type: string
+          description: Short, human-readable summary of the problem type.
+        status:
+          type: integer
+          minimum: 100
+          maximum: 599
+          description: HTTP status code.
+        detail:
+          type: string
+          description: Human-readable explanation specific to this occurrence.
+        instance:
+          type: string
+          format: uri-reference
+          description: URI identifying the specific occurrence (often the request path).
+      required: [title, status]
+
+    ValidationProblem:
+      description: |
+        Extension of `Problem` returned when request validation fails (typically
+        HTTP 400 or 422). Each entry in `errors` describes one failing field.
+      allOf:
+        - $ref: '#/components/schemas/Problem'
+        - type: object
+          properties:
+            errors:
+              type: array
+              items:
+                type: object
+                properties:
+                  field:
+                    type: string
+                    description: Dotted path to the failing field (e.g. `passenger.email`).
+                  message:
+                    type: string
+                required: [field, message]
+          required: [errors]
+
+  responses:
+    BadRequest:
+      description: Request validation failed.
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/ValidationProblem'
+    NotFound:
+      description: Resource not found.
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+    Conflict:
+      description: |
+        Request conflicts with the current state of the resource. Used by the
+        seat-map endpoint when the flight is in a status that does not allow
+        seat selection (e.g. Departed, Arrived, Cancelled).
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
