@@ -1,5 +1,8 @@
 package com.defenestration.bookings.common;
 
+import com.defenestration.bookings.booking.exception.SeatConflictException;
+import com.defenestration.bookings.booking.exception.UnknownFlightException;
+import com.defenestration.bookings.booking.exception.UnknownSeatException;
 import com.defenestration.bookings.seatmap.exception.FlightNotFoundException;
 import com.defenestration.bookings.seatmap.exception.FlightNotSelectableException;
 import jakarta.validation.ConstraintViolation;
@@ -43,6 +46,37 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
         problem.setTitle("Conflict");
         problem.setProperty("flightId", ex.flightId());
         problem.setProperty("currentStatus", ex.currentStatus());
+        return problem;
+    }
+
+    @ExceptionHandler(SeatConflictException.class)
+    public ProblemDetail handleSeatConflict(SeatConflictException ex) {
+        ProblemDetail problem = ProblemDetail.forStatusAndDetail(
+                HttpStatus.CONFLICT,
+                ex.getMessage());
+        problem.setTitle("Conflict");
+        problem.setProperty("conflicts", ex.conflicts());
+        return problem;
+    }
+
+    @ExceptionHandler(UnknownFlightException.class)
+    public ProblemDetail handleUnknownFlight(UnknownFlightException ex) {
+        ProblemDetail problem = ProblemDetail.forStatusAndDetail(
+                HttpStatus.NOT_FOUND,
+                ex.getMessage());
+        problem.setTitle("Not Found");
+        problem.setProperty("flightIds", ex.flightIds());
+        return problem;
+    }
+
+    @ExceptionHandler(UnknownSeatException.class)
+    public ProblemDetail handleUnknownSeat(UnknownSeatException ex) {
+        ProblemDetail problem = ProblemDetail.forStatusAndDetail(
+                HttpStatus.BAD_REQUEST,
+                ex.getMessage());
+        problem.setTitle("Bad Request");
+        problem.setProperty("flightId", ex.flightId());
+        problem.setProperty("seatNo", ex.seatNo());
         return problem;
     }
 
