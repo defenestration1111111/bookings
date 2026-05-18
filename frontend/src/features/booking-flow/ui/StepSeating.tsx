@@ -95,7 +95,7 @@ export function StepSeating({ legIndex, totalLegs, onNext, onBack }: Props) {
         <SeatAssignmentsPanel passengers={passengers} assignments={assignments} />
         <LegProgress totalLegs={totalLegs} currentLeg={legIndex} />
 
-        <div className="flex flex-col gap-3 mt-auto">
+        <div className="flex flex-col gap-3">
           <BackButton 
             onClick={onBack} 
             label={isFirstLeg ? t("booking.seating.back") : t("booking.seating.previousSeating")}
