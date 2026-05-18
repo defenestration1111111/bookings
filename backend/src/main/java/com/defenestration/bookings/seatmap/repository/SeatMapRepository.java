@@ -41,7 +41,8 @@ public interface SeatMapRepository extends Repository<Airport, String> {
               ON seg.flight_id = f.flight_id
              AND seg.seat_no   = s.seat_no
             WHERE f.flight_id = :flightId
-            ORDER BY s.seat_no
+            ORDER BY substring(s.seat_no from '^(\\d+)')::int,
+                     substring(s.seat_no from '([A-Z])$')
             """, nativeQuery = true)
     List<SeatRow> findSeats(@Param("flightId") int flightId);
 }
