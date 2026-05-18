@@ -1,18 +1,18 @@
 import { useState, useRef, useEffect } from "react";
-import { ConfirmationData, BookingDetails } from "./booking";
+import { BookingRequest, BookingResponse } from "./booking";
 import { createBooking } from "../api/booking.api";
 import { ApiError } from "../../../shared/api/client";
 
 type UseBookingResult = {
-  confirmation: ConfirmationData | null;
+  confirmation: BookingResponse | null;
   loading: boolean;
   /** ApiError when the server responded with an error body; plain Error for network failures */
   error: ApiError | Error | null;
-  book: (details: BookingDetails) => Promise<ConfirmationData | null>;
+  book: (request: BookingRequest) => Promise<BookingResponse | null>;
 };
 
 export function useBooking(): UseBookingResult {
-  const [confirmation, setConfirmation] = useState<ConfirmationData | null>(null);
+  const [confirmation, setConfirmation] = useState<BookingResponse | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<ApiError | Error | null>(null);
 
@@ -25,7 +25,7 @@ export function useBooking(): UseBookingResult {
     };
   }, []);
 
-  async function book(details: BookingDetails): Promise<ConfirmationData | null> {
+  async function book(request: BookingRequest): Promise<BookingResponse | null> {
     abortRef.current?.abort();
     const controller = new AbortController();
     abortRef.current = controller;
@@ -34,7 +34,7 @@ export function useBooking(): UseBookingResult {
     setError(null);
 
     try {
-      const result = await createBooking(details, controller.signal);
+      const result = await createBooking(request, controller.signal);
       setConfirmation(result);
       return result;
     } catch (err) {

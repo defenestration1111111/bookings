@@ -67,6 +67,45 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/bookings": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Create a booking (single passenger, one or more legs).
+         * @description Atomically inserts one `bookings` row, one `tickets` row, and one
+         *     `segments` row per leg, then returns the persisted booking. All
+         *     prices are recomputed server-side from
+         *     `route_fares × airplane_price_factor` for the leg's fare class —
+         *     the request does not carry prices.
+         *
+         *     Multi-passenger bookings are a future slice. This endpoint accepts
+         *     exactly one passenger; `tickets.outbound` is set to `true` for the
+         *     single ticket created (round-trip search is also future work, so
+         *     the outbound/return split is not yet exposed).
+         *
+         *     **Concurrency.** The unique constraint
+         *     `segments (flight_id, seat_no)` is the only seat-locking mechanism
+         *     in this slice: concurrent bookings of the same seat race to the
+         *     first INSERT; the loser receives a `409` with a list of seats that
+         *     clashed and is expected to refetch the seat map and repick. A
+         *     soft-hold table (`seat_holds`) is a planned follow-up.
+         *
+         *     **Payment.** Card details are validated for format and discarded.
+         *     They are not transmitted, persisted, or processed.
+         */
+        post: operations["createBooking"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/flights/{flightId}/seats": {
         parameters: {
             query?: never;
@@ -330,6 +369,101 @@ export interface components {
             seats: components["schemas"]["Seat"][];
         };
         /**
+         * @description Single-passenger, multi-leg booking. `legs` carries one entry per
+         *     flight in the chosen itinerary, in departure order.
+         */
+        BookingRequest: {
+            passenger: components["schemas"]["PassengerInfo"];
+            legs: components["schemas"]["BookingLegRequest"][];
+            payment: components["schemas"]["MockPayment"];
+        };
+        BookingLegRequest: {
+            flightId: number;
+            /** @example 12A */
+            seatNo: string;
+        };
+        PassengerInfo: {
+            firstName: string;
+            lastName: string;
+        };
+        /**
+         * @description Mock payment details. Validated for format only; never persisted or
+         *     sent to a payment processor. The presence of well-formed values
+         *     stands in for an actual payment-gateway success.
+         */
+        MockPayment: {
+            /** @description 12–19 digits; spaces tolerated. */
+            cardNumber: string;
+            /** @example 08/29 */
+            expiration: string;
+            cvv: string;
+        };
+        /**
+         * @description Confirmation of a completed booking. Mirrors the persisted rows:
+         *     one `bookings`, one `tickets`, one `segments` per leg.
+         */
+        BookingResponse: {
+            /**
+             * @description Booking reference (6-char uppercase alphanumeric).
+             * @example X3F9KQ
+             */
+            bookRef: string;
+            /**
+             * Format: date-time
+             * @description UTC instant the booking was created.
+             */
+            bookDate: string;
+            /** @description Sum of segment prices. */
+            totalAmount: number;
+            /**
+             * @default USD
+             * @example USD
+             */
+            currency: string;
+            passenger: components["schemas"]["PassengerInfo"];
+            /**
+             * @description Ticket number for the single passenger.
+             * @example 0005432900987
+             */
+            ticketNo: string;
+            segments: components["schemas"]["BookedSegment"][];
+        };
+        /** @description One leg of the confirmed booking, in departure order. */
+        BookedSegment: {
+            flightId: number;
+            /** @example PG0078 */
+            flightNumber: string;
+            fromAirport: components["schemas"]["AirportSummary"];
+            toAirport: components["schemas"]["AirportSummary"];
+            /** Format: date-time */
+            departureAt: string;
+            /** Format: date-time */
+            arrivalAt: string;
+            fareConditions: components["schemas"]["FareClass"];
+            seatNo: string;
+            /** @description Server-recomputed price for this segment. */
+            price: number;
+        };
+        /**
+         * @description Extension of `Problem` returned (HTTP 409) when one or more
+         *     requested seats are no longer available, or a flight in the
+         *     request is no longer in a bookable status. `conflicts` enumerates
+         *     the per-leg problems so the client can mark and refetch only the
+         *     affected legs.
+         */
+        SeatConflictProblem: components["schemas"]["Problem"] & {
+            conflicts: {
+                flightId: number;
+                /**
+                 * @description Seat that clashed (when `reason = seatTaken`). Omitted
+                 *     when the conflict is `flightNotBookable`.
+                 */
+                seatNo?: string;
+                /** @enum {string} */
+                reason: "seatTaken" | "flightNotBookable";
+            }[];
+        };
+        /**
          * @description RFC 7807 problem details. Returned with `Content-Type: application/problem+json`
          *     for every non-2xx response.
          */
@@ -453,6 +587,54 @@ export interface operations {
                 };
             };
             400: components["responses"]["BadRequest"];
+        };
+    };
+    createBooking: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BookingRequest"];
+            };
+        };
+        responses: {
+            /** @description Booking created. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BookingResponse"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            /** @description One or more `flightId`s do not exist. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /**
+             * @description One or more requested seats were taken by another booking
+             *     between seat-map load and submit, or a flight in the request
+             *     is no longer in a bookable status. `conflicts` enumerates the
+             *     per-leg problems.
+             */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["SeatConflictProblem"];
+                };
+            };
         };
     };
     getSeatMap: {

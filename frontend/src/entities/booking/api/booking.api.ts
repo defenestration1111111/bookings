@@ -1,14 +1,14 @@
 import { fetchJson } from "../../../shared/api/client";
-import { BookingDetails, ConfirmationData } from "../model/booking";
+import { BookingRequest, BookingResponse } from "../model/booking";
 
 export async function createBooking(
-  details: BookingDetails,
+  request: BookingRequest,
   signal?: AbortSignal
-): Promise<ConfirmationData> {
-  return fetchJson<ConfirmationData>("/bookings", {
+): Promise<BookingResponse> {
+  return fetchJson<BookingResponse>("/bookings", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(details),
+    body: JSON.stringify(request),
     signal,
   });
 }

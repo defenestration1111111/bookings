@@ -1,6 +1,10 @@
 import { useForm } from "react-hook-form";
 import { useNavigate } from "react-router-dom";
-import { BookingFormValues } from "../../../entities/booking/model/booking";
+import {
+  BookingFormValues,
+  BookingLegRequest,
+  BookingRequest,
+} from "../../../entities/booking/model/booking";
 import { useBookingContext } from "../../../entities/booking/model/BookingContext";
 import { useBooking } from "../../../entities/booking/model/useBooking";
 import { CancellationSection } from "../../../entities/booking/ui/CancellationSection";
@@ -29,9 +33,31 @@ export function StepOverview({
     defaultValues: { cardNumber: "", expiration: "", cvv: "" },
   });
 
-  async function onSubmit() {
+  async function onSubmit(values: BookingFormValues) {
     if (!selectedFlight) return;
-    const result = await book({ flightId: selectedFlight.id, passengers, selectedSeatIds: allSeatIds });
+
+    // Backend currently accepts a single passenger per booking (see api.yaml).
+    const [primary] = passengers;
+    if (!primary) return;
+
+    // One seat per leg in the single-passenger case.
+    const legs: BookingLegRequest[] = selectedFlight.legs.map((leg, i) => ({
+      flightId: leg.flightId,
+      seatNo: seatsByLeg[i]?.[0] ?? "",
+    }));
+
+    const request: BookingRequest = {
+      passenger: { firstName: primary.firstName, lastName: primary.lastName },
+      legs,
+      payment: {
+        cardNumber: values.cardNumber,
+        // FE renders "MM / YY"; backend regex requires "MM/YY".
+        expiration: values.expiration.replace(/\s+/g, ""),
+        cvv: values.cvv,
+      },
+    };
+
+    const result = await book(request);
     if (result) navigate("/confirmation");
   }
 

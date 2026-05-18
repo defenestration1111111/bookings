@@ -1,17 +1,10 @@
+import type { components } from "../../../shared/api/schema";
 import { PassengerInfo } from "../../passenger/model/passenger";
 
-export type BookingDetails = {
-  flightId: string;
-  passengers: PassengerInfo[];
-  selectedSeatIds: string[];
-};
-
-export type ConfirmationData = {
-  bookingId: string;
-  status: "confirmed" | "pending" | "failed";
-  gate: string;
-  boardingTime: string;
-};
+export type BookingRequest = components["schemas"]["BookingRequest"];
+export type BookingResponse = components["schemas"]["BookingResponse"];
+export type BookingLegRequest = components["schemas"]["BookingLegRequest"];
+export type MockPayment = components["schemas"]["MockPayment"];
 
 export type BookingFormValues = {
   passengers: PassengerInfo[];
