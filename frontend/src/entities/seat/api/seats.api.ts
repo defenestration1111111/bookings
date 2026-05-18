@@ -46,7 +46,7 @@ const mockSeatMap: SeatMapResponse = {
 // }
 
 export async function getSeatMap(
-  flightId: string,
+  flightId: number,
   signal?: AbortSignal
 ): Promise<SeatMapResponse> {
   return fetchJson<SeatMapResponse>(`/flights/${flightId}/seats`, { signal });

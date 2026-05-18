@@ -13,7 +13,7 @@ type UseSeatSelectionResult = {
   totalSeatPrice: number;
 };
 
-export function useSeatSelection(flightId: string): UseSeatSelectionResult {
+export function useSeatSelection(flightId: number): UseSeatSelectionResult {
   const { data, loading, error } = useFetch(
     (signal) => getSeatMap(flightId, signal),
     [flightId]

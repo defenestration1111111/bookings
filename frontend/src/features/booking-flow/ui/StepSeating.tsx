@@ -23,7 +23,7 @@ export function StepSeating({ legIndex, totalLegs, onNext, onBack }: Props) {
   const { t } = useTranslation();
   const { selectedFlight, passengers, setSeatsForLeg } = useBookingContext();
   const leg = selectedFlight!.legs[legIndex];
-  const { seats, layout, loading } = useSeatSelection(selectedFlight!.id);
+  const { seats, layout, loading } = useSeatSelection(leg.flightId);
   const fromCode = leg.fromAirport.airportCode;
   const toCode = leg.toAirport.airportCode;
   const { assign, getAssignments, getSeatIdsForLeg } = useSeatAssignments(totalLegs);

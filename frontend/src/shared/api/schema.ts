@@ -67,6 +67,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/flights/{flightId}/seats": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Seat map for a specific flight.
+         * @description Returns the airframe, the cabin layout (column letters and aisle
+         *     positions), and every seat on the aircraft for the given flight,
+         *     with each seat marked `unavailable: true` if it has already been
+         *     booked. Each seat carries the price for its fare class on this
+         *     flight, computed the same way as flight search
+         *     (`route_fares.price × airplane_price_factor`).
+         *
+         *     Seats in fare classes that are not sold on this route (no matching
+         *     `route_fares` row) are omitted from the response entirely — they
+         *     physically exist on the airframe but cannot be booked for this
+         *     flight.
+         *
+         *     Refuses with `409` for flights in a status that does not allow seat
+         *     selection (anything other than `Scheduled`, `On Time`, `Delayed`,
+         *     `Boarding`).
+         */
+        get: operations["getSeatMap"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -198,6 +232,11 @@ export interface components {
         };
         /** @description One flight segment within an itinerary. */
         Leg: {
+            /**
+             * @description Durable identifier of the underlying `bookings.flights` row.
+             *     Used by the seat-map endpoint (`/flights/{flightId}/seats`).
+             */
+            flightId: number;
             /** @example BA178 */
             flightNumber: string;
             fromAirport: components["schemas"]["AirportSummary"];
@@ -218,6 +257,77 @@ export interface components {
              *     in the destination airport's local timezone. UI convenience.
              */
             nextDayArrival: boolean;
+        };
+        /** @description Minimal airframe representation for the seat map. */
+        AirplaneSummary: {
+            /**
+             * @description Airplane code, IATA.
+             * @example 32N
+             */
+            code: string;
+            /**
+             * @description Airplane model.
+             * @example Airbus A320neo
+             */
+            model: string;
+        };
+        /**
+         * @description Cabin layout for the seat-map renderer. `columns` is the ordered set
+         *     of seat-letter columns present on the airframe (derived from the
+         *     seats table). `aisles_after` lists the column letters after which
+         *     the renderer should draw an aisle gap.
+         */
+        SeatLayout: {
+            /**
+             * @example [
+             *       "A",
+             *       "B",
+             *       "C",
+             *       "D",
+             *       "E",
+             *       "F"
+             *     ]
+             */
+            columns: string[];
+            /**
+             * @description Ordered subset of `columns`. Empty array is valid (renderer
+             *     draws no aisle gap).
+             * @example [
+             *       "C"
+             *     ]
+             */
+            aisles_after: string[];
+        };
+        /** @description A single seat on the aircraft for this flight. */
+        Seat: {
+            /**
+             * @description Seat identifier, equivalent to `row` concatenated with `letter`.
+             * @example 11D
+             */
+            id: string;
+            /** @example 11 */
+            row: number;
+            /** @example D */
+            letter: string;
+            seatClass: components["schemas"]["FareClass"];
+            /**
+             * @description True when the seat is already booked on this flight (a row exists
+             *     in `segments` for `(flight_id, seat_no)`). Omitted/false when
+             *     free.
+             */
+            unavailable?: boolean;
+            /**
+             * @description Price for this seat on this flight, equal to the flight's
+             *     per-class price (`route_fares.price × airplane_price_factor`)
+             *     for the seat's `seatClass`.
+             */
+            price: number;
+        };
+        /** @description Seat map for a specific flight. */
+        SeatMapResponse: {
+            airplane: components["schemas"]["AirplaneSummary"];
+            layout: components["schemas"]["SeatLayout"];
+            seats: components["schemas"]["Seat"][];
         };
         /**
          * @description RFC 7807 problem details. Returned with `Content-Type: application/problem+json`
@@ -262,6 +372,28 @@ export interface components {
             };
             content: {
                 "application/problem+json": components["schemas"]["ValidationProblem"];
+            };
+        };
+        /** @description Resource not found. */
+        NotFound: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/problem+json": components["schemas"]["Problem"];
+            };
+        };
+        /**
+         * @description Request conflicts with the current state of the resource. Used by the
+         *     seat-map endpoint when the flight is in a status that does not allow
+         *     seat selection (e.g. Departed, Arrived, Cancelled).
+         */
+        Conflict: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/problem+json": components["schemas"]["Problem"];
             };
         };
     };
@@ -321,6 +453,31 @@ export interface operations {
                 };
             };
             400: components["responses"]["BadRequest"];
+        };
+    };
+    getSeatMap: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Flight ID. */
+                flightId: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Seat map for the flight. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SeatMapResponse"];
+                };
+            };
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
         };
     };
 }
