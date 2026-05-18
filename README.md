@@ -6,8 +6,7 @@ frontend, PostgreSQL 17. OpenAPI spec lives at `api.yaml`; the FE generates
 its types from it (`frontend/src/shared/api/schema.ts`).
 
 For setup, demo-data loading, and the two-database layout see
-[`backend/README.md`](backend/README.md). SQL walkthrough for flight search
-in [`backend/FLIGHTSEARCH_SQL.md`](backend/FLIGHTSEARCH_SQL.md).
+[`backend/README.md`](backend/README.md).
 
 ![Booking a flight, end to end](docs/demo.gif)
 
