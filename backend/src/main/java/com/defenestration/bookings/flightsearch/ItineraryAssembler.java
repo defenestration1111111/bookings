@@ -55,6 +55,7 @@ public class ItineraryAssembler {
 
     private static Leg toLeg(LegDetailRow r) {
         return new Leg(
+                r.getFlightId(),
                 r.getFlightNumber(),
                 new LegAirport(r.getFromCode().trim(), r.getFromCity()),
                 new LegAirport(r.getToCode().trim(), r.getToCity()),

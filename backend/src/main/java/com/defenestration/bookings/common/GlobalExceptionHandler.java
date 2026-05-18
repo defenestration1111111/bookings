@@ -1,5 +1,7 @@
 package com.defenestration.bookings.common;
 
+import com.defenestration.bookings.seatmap.exception.FlightNotFoundException;
+import com.defenestration.bookings.seatmap.exception.FlightNotSelectableException;
 import jakarta.validation.ConstraintViolation;
 import jakarta.validation.ConstraintViolationException;
 import java.util.List;
@@ -20,6 +22,27 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
                 "Request validation failed.");
         problem.setTitle("Bad Request");
         problem.setProperty("errors", toFieldErrors(ex.getConstraintViolations()));
+        return problem;
+    }
+
+    @ExceptionHandler(FlightNotFoundException.class)
+    public ProblemDetail handleFlightNotFound(FlightNotFoundException ex) {
+        ProblemDetail problem = ProblemDetail.forStatusAndDetail(
+                HttpStatus.NOT_FOUND,
+                ex.getMessage());
+        problem.setTitle("Not Found");
+        problem.setProperty("flightId", ex.flightId());
+        return problem;
+    }
+
+    @ExceptionHandler(FlightNotSelectableException.class)
+    public ProblemDetail handleFlightNotSelectable(FlightNotSelectableException ex) {
+        ProblemDetail problem = ProblemDetail.forStatusAndDetail(
+                HttpStatus.CONFLICT,
+                ex.getMessage());
+        problem.setTitle("Conflict");
+        problem.setProperty("flightId", ex.flightId());
+        problem.setProperty("currentStatus", ex.currentStatus());
         return problem;
     }
 
