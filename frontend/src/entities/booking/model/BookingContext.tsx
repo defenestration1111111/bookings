@@ -1,6 +1,7 @@
 import { createContext, useContext, useState, ReactNode } from "react";
 import { Itinerary, SearchParams } from "../../flight/model/flight";
 import { PassengerInfo } from "../../passenger/model/passenger";
+import { BookingResponse } from "./booking";
 
 type BookingContextType = {
   selectedFlight: Itinerary | null;
@@ -8,6 +9,7 @@ type BookingContextType = {
   seatsByLeg: string[][];
   passengers: PassengerInfo[];
   searchParams: SearchParams | null;
+  confirmation: BookingResponse | null;
 
   selectFlight: (flight: Itinerary) => void;
   setPassengerCount: (count: number) => void;
@@ -15,6 +17,7 @@ type BookingContextType = {
   setSeatsForLeg: (legIndex: number, ids: string[]) => void;
   setPassengers: (passengers: PassengerInfo[]) => void;
   setSearchParams: (params: SearchParams) => void;
+  setConfirmation: (c: BookingResponse | null) => void;
   reset: () => void;
 };
 
@@ -26,6 +29,7 @@ export function BookingProvider({ children }: { children: ReactNode }) {
   const [seatsByLeg, setSeatsByLeg] = useState<string[][]>([]);
   const [passengers, setPassengers] = useState<PassengerInfo[]>([]);
   const [searchParams, setSearchParams] = useState<SearchParams | null>(null);
+  const [confirmation, setConfirmation] = useState<BookingResponse | null>(null);
 
   function selectFlight(flight: Itinerary) {
     setSelectedFlight(flight);
@@ -45,6 +49,7 @@ export function BookingProvider({ children }: { children: ReactNode }) {
     setSeatsByLeg([]);
     setPassengers([]);
     setSearchParams(null);
+    setConfirmation(null);
   }
 
   return (
@@ -54,12 +59,14 @@ export function BookingProvider({ children }: { children: ReactNode }) {
       seatsByLeg,
       passengers,
       searchParams,
+      confirmation,
       selectFlight,
       setPassengerCount,
       setSeatsByLeg,
       setSeatsForLeg,
       setPassengers,
       setSearchParams,
+      setConfirmation,
       reset,
     }}>
       {children}

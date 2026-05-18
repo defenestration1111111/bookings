@@ -23,7 +23,7 @@ export function StepOverview({
   onBackToSeating: () => void;
 }) {
   const navigate = useNavigate();
-  const { selectedFlight, passengerCount, passengers, seatsByLeg } = useBookingContext();
+  const { selectedFlight, passengerCount, passengers, seatsByLeg, setConfirmation } = useBookingContext();
   const allSeatIds = seatsByLeg.flat();
 
   const { book, loading, error } = useBooking();
@@ -58,7 +58,10 @@ export function StepOverview({
     };
 
     const result = await book(request);
-    if (result) navigate("/confirmation");
+    if (result) {
+      setConfirmation(result);
+      navigate("/confirmation");
+    }
   }
 
   if (!selectedFlight) return null;

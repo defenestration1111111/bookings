@@ -2,7 +2,7 @@ import { useBookingContext } from "../entities/booking/model/BookingContext";
 import { formatTime } from "../entities/flight/lib/flightTime";
 
 export default function ConfirmationPage() {
-  const { selectedFlight, passengers, seatsByLeg } = useBookingContext();
+  const { selectedFlight, passengers, seatsByLeg, confirmation } = useBookingContext();
   const allSeatIds = seatsByLeg.flat();
   const firstLeg = selectedFlight!.legs[0];
   const lastLeg = selectedFlight!.legs[selectedFlight!.legs.length - 1];
@@ -17,7 +17,7 @@ export default function ConfirmationPage() {
 
       <div className="max-w-3xl mx-auto border rounded-[24px] overflow-hidden shadow-sm">
         <div className="bg-rausch text-white p-6 flex justify-between items-center">
-          <span className="font-title-md">Itinerary {selectedFlight!.id}</span>
+          <span className="font-title-md">Booking {confirmation?.bookRef ?? "—"}</span>
           <span className="font-body-md opacity-90">{formatTime(firstLeg.departureAt)}</span>
         </div>
 
